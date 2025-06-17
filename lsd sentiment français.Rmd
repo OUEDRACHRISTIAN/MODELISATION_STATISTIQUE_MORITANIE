@@ -1,0 +1,129 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-10-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---------------------------------------------------------------------------------------------------
+## CREATE SENTIMENT SCORE
+---------------------------------------------------------------------------------------------------
+
+
+1. dfm_newspapers_quebec_francophone = dfm issu du corpus
+2. full_integration_topic_large = Base de données original
+
+
+```{r}
+
+lsd <- read.csv("C:/Users/User/Desktop/ANALYSE_QUALITATIVES/Data/lsd_fr_convert.csv", sep = ";")
+
+lsd <- lsd %>%
+  drop_na()
+
+lsd <- lsd %>%
+  mutate(negative = negative %>% str_to_lower(),
+         positive = positive %>% str_to_lower())
+```
+
+
+```{r}
+lsd$positive <- gsub("[()]", "", lsd$positive)
+lsd$negative <- gsub("[()]", "", lsd$negative)
+```
+
+
+```{r}
+# Remove leading and trailing spaces
+lsd$positive <- trimws(lsd$positive)
+
+lsd$negative <- trimws(lsd$negative)
+```
+
+
+```{r}
+lsd_pos <-lsd %>%
+  dplyr::select(positive)%>%
+  filter(positive!="missing")
+```
+
+
+```{r}
+lsd_neg <-lsd %>%
+  dplyr::select(negative)
+```
+
+
+```{r}
+#lsd <-lsd %>% as.list()
+lsd_pos <-lsd_pos %>% as.list()
+lsd_neg <-lsd_neg %>% as.list()
+
+list_lsd = c(lsd_pos, lsd_neg)
+
+
+lsdfr_dict <- dictionary(list_lsd)
+
+```
+
+
+
+```{r}
+newspapers_tokens <-as.tokens(tokenlist, use_lemma = FALSE) %>%
+   quanteda::tokens(remove_punct = TRUE, 
+                    remove_numbers = TRUE, 
+                    remove_symbols = TRUE,
+                    remove_separators = TRUE, 
+                    split_hyphens = TRUE,
+                    remove_url = TRUE,
+                    include_docvars = TRUE)%>% 
+  tokens_tolower() %>% 
+  #quanteda::tokens_remove(pattern = phrase(mystopwords), valuetype = 'fixed')%>% 
+  quanteda::tokens_remove(c(stopwords('french')))
+```
+
+
+## Clean again tokens created 
+
+
+```{r}
+dfm_newspapers_quebec_francophone <- newspapers_tokens %>% 
+  quanteda::dfm(tolower = TRUE) 
+```
+
+
+```{r}
+# Call a dictionary
+dfm_lsd <-
+dfm_lookup(dfm_newspapers_quebec_francophone, 
+           dictionary = lsdfr_dict,
+           exclusive = TRUE,
+          # valuetype = "fixed",
+           case_insensitive = TRUE,
+           verbose = FALSE) %>%
+  #dfm_weight(scheme = "prop") %>% 
+  convert(to = "data.frame") %>%
+  mutate(total_words = ntoken(dfm_newspapers_quebec_francophone),
+    # Generate the relative frequency
+    pos_perc = 100*positive / total_words,
+    neg_perc = 100*negative / total_words,
+    # Generate the net sentiment
+    net_perc = pos_perc - neg_perc)
+```
+
+
+```{r}
+data_lsd_quebec <- dfm_lsd %>%
+  dplyr::transmute(doc_id= doc_id,
+                   sentiment_global = net_perc)#%>%
+  #mutate(across(sentiment_global, scale, scale = TRUE))
+
+```
+
+
+```{r}
+data_lsd_quebec <- cbind (data_lsd_quebec, full_integration_topic_large)
+```
